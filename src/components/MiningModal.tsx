@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Block, Transaction, Participant } from '../types/blockchain';
 import { calculateBlockHash } from '../utils/crypto';
 import confetti from 'canvas-confetti';
@@ -13,7 +13,6 @@ import {
   CheckCircle2,
   Info,
   Sliders,
-  HelpCircle,
   Zap,
 } from 'lucide-react';
 
@@ -35,7 +34,7 @@ export const MiningModal: React.FC<MiningModalProps> = ({
   onBlockMined,
 }) => {
   const [selectedMinerId, setSelectedMinerId] = useState<string>('user');
-  const [difficulty, setDifficulty] = useState<number>(2); // 2 zeros
+  const [difficulty, setDifficulty] = useState<number>(2); // 2 zeros ('00')
   const [nonce, setNonce] = useState<number>(0);
   const [currentHash, setCurrentHash] = useState<string>('');
   const [isMining, setIsMining] = useState<boolean>(false);
@@ -43,33 +42,78 @@ export const MiningModal: React.FC<MiningModalProps> = ({
   const [attempts, setAttempts] = useState<number>(0);
   const [isSolved, setIsSolved] = useState<boolean>(false);
   const [solvedBlock, setSolvedBlock] = useState<Block | null>(null);
+  const [blockTimestamp, setBlockTimestamp] = useState<number>(() => Date.now());
 
   const blockIndex = lastBlock.index + 1;
   const previousHash = lastBlock.hash;
-  const blockTimestamp = useRef(Date.now()).current;
 
   // Selected miner info
-  const selectedMiner = participants.find((p) => p.id === selectedMinerId) || participants[0];
+  const selectedMiner = useMemo(
+    () => participants.find((p) => p.id === selectedMinerId) || participants[0],
+    [participants, selectedMinerId]
+  );
 
   // Coinbase reward transaction (Creation of new crypto!)
-  const coinbaseTx: Transaction = {
-    id: `tx-coinbase-${blockIndex}`,
-    senderId: 'SYSTEM',
-    senderName: 'Blockchain-System (Belohnung)',
-    recipientId: selectedMiner.id,
-    recipientName: selectedMiner.name,
-    amount: 10,
-    purpose: 'Neu erschaffene EduCoins für das Lösen des Rätsels',
-    timestamp: blockTimestamp,
-    isCoinbase: true,
-  };
+  const coinbaseTx = useMemo<Transaction>(() => {
+    return {
+      id: `tx-coinbase-${blockIndex}-${blockTimestamp}`,
+      senderId: 'SYSTEM',
+      senderName: 'Blockchain-System (Belohnung)',
+      recipientId: selectedMiner.id,
+      recipientName: selectedMiner.name,
+      amount: 10,
+      purpose: 'Neu erschaffene EduCoins für das Lösen des Rätsels',
+      timestamp: blockTimestamp,
+      isCoinbase: true,
+    };
+  }, [blockIndex, blockTimestamp, selectedMiner.id, selectedMiner.name]);
 
-  // The block payload contains Coinbase reward + all mempool transactions
-  const blockTransactions = [coinbaseTx, ...mempool];
+  // Block payload contains Coinbase reward + mempool transactions
+  const blockTransactions = useMemo(
+    () => [coinbaseTx, ...mempool],
+    [coinbaseTx, mempool]
+  );
+
   const targetPrefix = '0'.repeat(difficulty);
 
-  // Compute hash when nonce or difficulty changes manually
+  // Whenever modal opens or previous block changes, reset EVERYTHING for the new block!
   useEffect(() => {
+    if (isOpen) {
+      const now = Date.now();
+      setBlockTimestamp(now);
+      setNonce(0);
+      setAttempts(0);
+      setIsMining(false);
+      setIsSolved(false);
+      setSolvedBlock(null);
+      setHashRate(0);
+
+      // Compute initial hash for nonce = 0 with new timestamp & previousHash
+      const freshCoinbaseTx: Transaction = {
+        id: `tx-coinbase-${blockIndex}-${now}`,
+        senderId: 'SYSTEM',
+        senderName: 'Blockchain-System (Belohnung)',
+        recipientId: selectedMiner.id,
+        recipientName: selectedMiner.name,
+        amount: 10,
+        purpose: 'Neu erschaffene EduCoins für das Lösen des Rätsels',
+        timestamp: now,
+        isCoinbase: true,
+      };
+      const freshTxs = [freshCoinbaseTx, ...mempool];
+
+      calculateBlockHash(blockIndex, previousHash, now, freshTxs, 0).then((h) => {
+        setCurrentHash(h);
+      });
+    } else {
+      setIsMining(false);
+    }
+  }, [isOpen, lastBlock.index, lastBlock.hash]);
+
+  // Handle manual steps or difficulty/miner changes
+  useEffect(() => {
+    if (!isOpen || isMining) return;
+
     let isCancelled = false;
     calculateBlockHash(
       blockIndex,
@@ -82,8 +126,21 @@ export const MiningModal: React.FC<MiningModalProps> = ({
         setCurrentHash(h);
         if (h.startsWith(targetPrefix)) {
           setIsSolved(true);
+          setSolvedBlock({
+            index: blockIndex,
+            timestamp: blockTimestamp,
+            transactions: blockTransactions,
+            previousHash,
+            hash: h,
+            nonce,
+            difficulty,
+            minerId: selectedMiner.id,
+            minerName: selectedMiner.name,
+            isValid: true,
+          });
         } else {
           setIsSolved(false);
+          setSolvedBlock(null);
         }
       }
     });
@@ -91,14 +148,14 @@ export const MiningModal: React.FC<MiningModalProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [nonce, difficulty, selectedMinerId]);
+  }, [nonce, difficulty, selectedMinerId, blockIndex, previousHash, blockTimestamp, blockTransactions, targetPrefix, isOpen, isMining]);
 
   // Automated Mining Loop
   const miningRef = useRef<boolean>(false);
   miningRef.current = isMining;
 
   useEffect(() => {
-    if (!isMining) return;
+    if (!isMining || !isOpen) return;
 
     let activeNonce = nonce;
     let localAttempts = 0;
@@ -108,7 +165,7 @@ export const MiningModal: React.FC<MiningModalProps> = ({
     const mineBatch = async () => {
       if (!miningRef.current) return;
 
-      const BATCH_SIZE = 40; // test 40 hashes per frame
+      const BATCH_SIZE = 50; // test 50 nonces per frame
       for (let i = 0; i < BATCH_SIZE; i++) {
         activeNonce++;
         localAttempts++;
@@ -121,7 +178,7 @@ export const MiningModal: React.FC<MiningModalProps> = ({
         );
 
         if (h.startsWith(targetPrefix)) {
-          // Found valid solution!
+          // Valid solution found!
           setNonce(activeNonce);
           setCurrentHash(h);
           setIsMining(false);
@@ -143,7 +200,6 @@ export const MiningModal: React.FC<MiningModalProps> = ({
 
           setSolvedBlock(newBlock);
 
-          // Confetti celebration!
           confetti({
             particleCount: 80,
             spread: 60,
@@ -171,7 +227,7 @@ export const MiningModal: React.FC<MiningModalProps> = ({
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [isMining, difficulty, targetPrefix]);
+  }, [isMining, isOpen, blockIndex, previousHash, blockTimestamp, blockTransactions, targetPrefix, difficulty, selectedMiner]);
 
   if (!isOpen) return null;
 
@@ -181,12 +237,12 @@ export const MiningModal: React.FC<MiningModalProps> = ({
     setAttempts((prev) => prev + 1);
   };
 
-  const handleCommitBlock = () => {
-    if (solvedBlock) {
-      onBlockMined(solvedBlock);
-      onClose();
-    } else if (isSolved) {
-      const newBlock: Block = {
+  const handleCommitBlock = async () => {
+    let blockToCommit = solvedBlock;
+
+    // Safety fallback: if solvedBlock not yet populated, create and verify
+    if (!blockToCommit && isSolved) {
+      blockToCommit = {
         index: blockIndex,
         timestamp: blockTimestamp,
         transactions: blockTransactions,
@@ -198,7 +254,15 @@ export const MiningModal: React.FC<MiningModalProps> = ({
         minerName: selectedMiner.name,
         isValid: true,
       };
-      onBlockMined(newBlock);
+    }
+
+    if (blockToCommit) {
+      onBlockMined(blockToCommit);
+      // Cleanly reset state so consecutive mining starts fresh!
+      setIsSolved(false);
+      setSolvedBlock(null);
+      setNonce(0);
+      setIsMining(false);
       onClose();
     }
   };
@@ -217,7 +281,7 @@ export const MiningModal: React.FC<MiningModalProps> = ({
                 Mining-Labor: Block #{blockIndex} schürfen
               </h2>
               <p className="text-xs text-slate-500">
-                Löse das mathematische Rätsel, um neue EduCoins zu erschaffen.
+                Löse das mathematische Rätsel für Block #{blockIndex}, um neue EduCoins zu erschaffen.
               </p>
             </div>
           </div>
@@ -257,6 +321,7 @@ export const MiningModal: React.FC<MiningModalProps> = ({
                 onChange={(e) => {
                   setSelectedMinerId(e.target.value);
                   setIsSolved(false);
+                  setSolvedBlock(null);
                 }}
                 disabled={isMining || isSolved}
                 className="w-full text-xs font-medium border border-slate-300 rounded-lg p-2 bg-white text-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-500"
@@ -293,6 +358,7 @@ export const MiningModal: React.FC<MiningModalProps> = ({
                     onClick={() => {
                       setDifficulty(level);
                       setIsSolved(false);
+                      setSolvedBlock(null);
                     }}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                       difficulty === level
@@ -318,8 +384,8 @@ export const MiningModal: React.FC<MiningModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-700">
               <div>
                 <span className="text-slate-500 font-sans block text-[10px]">Vorheriger Hash:</span>
-                <span className="truncate block font-semibold" title={previousHash}>
-                  {previousHash.slice(0, 16)}...
+                <span className="truncate block font-semibold text-slate-800" title={previousHash}>
+                  {previousHash.slice(0, 16)}...{previousHash.slice(-8)}
                 </span>
               </div>
               <div>
@@ -340,7 +406,7 @@ export const MiningModal: React.FC<MiningModalProps> = ({
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                 <Zap className="w-4 h-4 text-amber-500" />
-                Live SHA-256 Hash-Berechnung
+                Live SHA-256 Hash-Berechnung für Block #{blockIndex}
               </span>
               <div className="text-slate-500 font-mono text-xs tabular-nums">
                 Versuche: <strong>{attempts}</strong>
@@ -355,7 +421,7 @@ export const MiningModal: React.FC<MiningModalProps> = ({
                 {nonce}
               </span>
               <span className="text-[10px] text-slate-400 font-sans ml-auto">
-                (Wird solange erhöht, bis der Hash passt)
+                (Wird solange probiert, bis der Hash passt)
               </span>
             </div>
 
@@ -382,7 +448,7 @@ export const MiningModal: React.FC<MiningModalProps> = ({
                 {isSolved ? (
                   <span className="text-emerald-700 font-bold flex items-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    Perfekt! Gültiger Block-Hash gefunden! (Nonce: {nonce})
+                    Perfekt! Gültiger Block-Hash für Block #{blockIndex} gefunden! (Nonce: {nonce})
                   </span>
                 ) : (
                   <span className="text-slate-500">
@@ -435,7 +501,7 @@ export const MiningModal: React.FC<MiningModalProps> = ({
                   className="w-full py-2.5 px-4 rounded-lg font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center justify-center gap-2 transition-colors"
                 >
                   <Sparkles className="w-4 h-4" />
-                  Block in Blockchain einfügen & 10 EDC Belohnung gutschreiben
+                  Block #{blockIndex} in Blockchain einfügen & 10 EDC Belohnung gutschreiben
                 </button>
               )}
             </div>

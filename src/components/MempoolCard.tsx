@@ -97,15 +97,14 @@ export const MempoolCard: React.FC<MempoolCardProps> = ({
       <div className="pt-3 mt-3 border-t border-slate-100 flex items-center gap-2">
         <button
           onClick={onOpenMining}
-          disabled={mempool.length === 0}
-          className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 text-xs font-semibold rounded-lg transition-colors ${
-            mempool.length > 0
-              ? 'bg-sky-600 hover:bg-sky-700 text-white shadow-xs'
-              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-          }`}
+          className="flex-1 flex items-center justify-center gap-2 py-2 px-3 text-xs font-semibold rounded-lg transition-colors bg-sky-600 hover:bg-sky-700 text-white shadow-xs"
         >
           <Cpu className="w-3.5 h-3.5" />
-          <span>Diese {mempool.length} {mempool.length === 1 ? 'Transaktion' : 'Transaktionen'} schürfen</span>
+          <span>
+            {mempool.length > 0
+              ? `Diese ${mempool.length} ${mempool.length === 1 ? 'Transaktion' : 'Transaktionen'} schürfen`
+              : 'Neuen Block schürfen (+10 EDC Belohnung)'}
+          </span>
         </button>
       </div>
     </div>

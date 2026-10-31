@@ -107,17 +107,6 @@ export default function App() {
     initBlockchain();
   }, []);
 
-  // Recalculate validation whenever blocks change
-  useEffect(() => {
-    if (blocks.length === 0) return;
-
-    validateEntireChain(blocks).then((result) => {
-      setIsChainValid(result.isValid);
-      setBrokenBlockIndex(result.brokenIndex);
-      // Update blocks with their isValid flags
-      setBlocks(result.validatedBlocks);
-    });
-  }, [blocks.length]);
 
   // Compute live balances
   const balances = useMemo(() => {
@@ -142,21 +131,18 @@ export default function App() {
     markMissionCompleted('m1_tx');
   };
 
-  const handleBlockMined = (newBlock: Block) => {
-    // Add block to chain
+  const handleBlockMined = async (newBlock: Block) => {
+    // Add block to chain and validate atomically
     const updatedBlocks = [...blocks, newBlock];
-    setBlocks(updatedBlocks);
-    setOriginalBlocks(JSON.parse(JSON.stringify(updatedBlocks)));
+    const validation = await validateEntireChain(updatedBlocks);
+    setBlocks(validation.validatedBlocks);
+    setOriginalBlocks(JSON.parse(JSON.stringify(validation.validatedBlocks)));
+    setIsChainValid(validation.isValid);
+    setBrokenBlockIndex(validation.brokenIndex);
 
     // Clear mined transactions from mempool (except the coinbase tx which was created fresh)
     const minedTxIds = new Set(newBlock.transactions.map((t) => t.id));
     setMempool((prev) => prev.filter((t) => !minedTxIds.has(t.id)));
-
-    // Revalidate chain
-    validateEntireChain(updatedBlocks).then((result) => {
-      setIsChainValid(result.isValid);
-      setBrokenBlockIndex(result.brokenIndex);
-    });
 
     markMissionCompleted('m2_mine');
   };
