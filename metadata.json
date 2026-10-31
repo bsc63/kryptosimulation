@@ -1,0 +1,6 @@
+{
+  "name": "KryptoKette: Blockchain-Schullabor",
+  "description": "Interaktive Blockchain- und Krypto-Simulation für Schüler der Klassenstufen 7 bis 9. Verstehe Mining, Transaktionen, Wallets und Fälschungssicherheit spielerisch.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
