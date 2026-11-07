@@ -512,10 +512,6 @@ export default function App() {
           if (tab === 'tamper') setIsTamperOpen(true);
           if (tab === 'quiz') setIsQuizOpen(true);
         }}
-        onOpenTransfer={() => {
-          setTransferSenderId(currentUser?.id || 'user');
-          setIsTransferOpen(true);
-        }}
         onOpenGlossary={() => setIsGlossaryOpen(true)}
         onOpenHashLab={() => setIsHashLabOpen(true)}
         isChainValid={isChainValid}
@@ -524,6 +520,7 @@ export default function App() {
         humanCount={humanPlayerCount}
         onOpenLanInfo={() => setIsLanInfoOpen(true)}
         currentUser={currentUser || undefined}
+        userBalance={balances[currentUser?.id || 'user']?.confirmed ?? 25}
         onOpenJoinModal={() => setIsJoinModalOpen(true)}
       />
 
@@ -567,6 +564,7 @@ export default function App() {
             setIsTransferOpen(true);
           }}
           onOpenHashLab={() => setIsHashLabOpen(true)}
+          onOpenLanInfo={() => setIsLanInfoOpen(true)}
         />
 
         {/* Tab-Specific Content or Main Labor */}

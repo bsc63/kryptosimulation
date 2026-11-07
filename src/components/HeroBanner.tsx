@@ -1,5 +1,15 @@
 import React from 'react';
-import { Link2, Cpu, Coins, ShieldCheck, AlertTriangle, ArrowRight, Play } from 'lucide-react';
+import {
+  Link2,
+  Cpu,
+  Coins,
+  ShieldCheck,
+  AlertTriangle,
+  ArrowRight,
+  Server,
+  Download,
+} from 'lucide-react';
+import { downloadServerPy } from '../utils/serverScript';
 
 interface HeroBannerProps {
   blockCount: number;
@@ -9,6 +19,7 @@ interface HeroBannerProps {
   onOpenMining: () => void;
   onOpenTransfer: () => void;
   onOpenHashLab: () => void;
+  onOpenLanInfo?: () => void;
 }
 
 export const HeroBanner: React.FC<HeroBannerProps> = ({
@@ -19,6 +30,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   onOpenMining,
   onOpenTransfer,
   onOpenHashLab,
+  onOpenLanInfo,
 }) => {
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 p-6 sm:p-7 shadow-xs">
@@ -69,8 +81,34 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
               onClick={onOpenHashLab}
               className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-lg border border-slate-200 transition-colors"
             >
-              <span>Hash-Sandkasten testen</span>
+              <span>Hash-Sandkasten</span>
             </button>
+          </div>
+
+          {/* Dedicated Teacher & Classroom Server Strip */}
+          <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2.5 text-xs">
+            <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+              <Server className="w-3.5 h-3.5 text-amber-600" />
+              <span>Für Lehrkräfte:</span>
+            </span>
+            <button
+              type="button"
+              onClick={downloadServerPy}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg transition-colors cursor-pointer shadow-2xs"
+              title="Klicke hier, um server.py direkt herunterzuladen"
+            >
+              <Download className="w-3.5 h-3.5 text-amber-700" />
+              <span>📥 server.py herunterladen (1 Klick)</span>
+            </button>
+            {onOpenLanInfo && (
+              <button
+                type="button"
+                onClick={onOpenLanInfo}
+                className="text-sky-700 hover:text-sky-900 font-medium underline transition-colors"
+              >
+                LAN-Anleitung anzeigen
+              </button>
+            )}
           </div>
         </div>
 

@@ -8,11 +8,16 @@ import {
   CheckCircle2,
   Copy,
   Laptop,
-  Smartphone,
   ShieldCheck,
   RefreshCw,
+  Download,
+  FileCode,
+  Folder,
+  Code2,
+  Check,
 } from 'lucide-react';
 import { Participant } from '../types/blockchain';
+import { downloadServerPy, SERVER_PY_SOURCE } from '../utils/serverScript';
 
 interface LanInfoModalProps {
   isOpen: boolean;
@@ -32,6 +37,8 @@ export const LanInfoModal: React.FC<LanInfoModalProps> = ({
   onRefreshConnection,
 }) => {
   const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
+  const [downloadSuccess, setDownloadSuccess] = useState<boolean>(false);
+  const [showCode, setShowCode] = useState<boolean>(false);
 
   if (!isOpen) return null;
 
@@ -41,7 +48,13 @@ export const LanInfoModal: React.FC<LanInfoModalProps> = ({
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedCmd(id);
-    setTimeout(() => setCopiedCmd(null), 2000);
+    setTimeout(() => setCopiedCmd(null), 2500);
+  };
+
+  const handleDownload = () => {
+    downloadServerPy();
+    setDownloadSuccess(true);
+    setTimeout(() => setDownloadSuccess(false), 4000);
   };
 
   return (
@@ -187,28 +200,94 @@ export const LanInfoModal: React.FC<LanInfoModalProps> = ({
               Es stehen zwei Methoden zur Verfügung, um die Simulation im Raum bereitzustellen:
             </p>
 
-            {/* Option 1: Python 3 Server */}
-            <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                  <span className="w-5 h-5 rounded bg-amber-100 text-amber-800 flex items-center justify-center text-[11px] font-mono">
+            {/* Option 1: Python 3 Server (Primary recommendation) */}
+            <div className="bg-white border-2 border-amber-300 rounded-xl p-4 space-y-3 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-lg bg-amber-500 text-white flex items-center justify-center text-xs font-bold font-mono">
                     Py
                   </span>
-                  Methode 1: Lokaler Python 3 Server (Kein npm nötig!)
-                </span>
+                  <div>
+                    <span className="font-bold text-sm text-slate-900 block">
+                      Methode 1: Lokaler Python 3 Server
+                    </span>
+                    <span className="text-[11px] text-emerald-700 font-semibold">
+                      ✓ Empfohlen für Schulen (Kein Node.js / kein npm nötig!)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Prominent Direct 1-Click Download Button */}
                 <button
-                  onClick={() => copyToClipboard('python3 server.py 8000', 'py')}
-                  className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1"
+                  type="button"
+                  onClick={handleDownload}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 active:bg-amber-800 rounded-lg shadow-sm transition-all shrink-0 cursor-pointer"
+                  title="server.py direkt auf deinen Computer herunterladen"
                 >
-                  <Copy className="w-3 h-3" />
-                  {copiedCmd === 'py' ? 'Kopiert!' : 'Kopieren'}
+                  {downloadSuccess ? (
+                    <>
+                      <Check className="w-4 h-4 text-white" />
+                      <span>server.py heruntergeladen!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" />
+                      <span>📥 server.py herunterladen (1 Klick)</span>
+                    </>
+                  )}
                 </button>
               </div>
-              <p className="text-[11px] text-slate-500">
-                Läuft auf jedem Rechner mit vorinstalliertem Python 3. Startet sofort mit integriertem LAN-Broadcast:
-              </p>
-              <div className="bg-slate-900 text-emerald-400 p-2 rounded font-mono text-[11px] flex items-center justify-between">
-                <code>python3 server.py 8000</code>
+
+              {/* Exact Location info */}
+              <div className="p-2.5 bg-amber-50/80 border border-amber-200 rounded-lg text-[11px] text-amber-950 flex items-start gap-2">
+                <Folder className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <strong>Wo liegt die Datei im Projekt?</strong> Direkt im <strong>Hauptverzeichnis (Root)</strong> deines Projekts / GitHub-Repositories als <code className="bg-white px-1.5 py-0.5 rounded font-mono font-bold border border-amber-200">server.py</code> (neben <code className="bg-white px-1 py-0.2 rounded font-mono">package.json</code> und <code className="bg-white px-1 py-0.2 rounded font-mono">index.html</code>).
+                </div>
+              </div>
+
+              {/* Start command */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-700">
+                  <span>Terminal-Befehl zum Starten:</span>
+                  <button
+                    onClick={() => copyToClipboard('python3 server.py 8000', 'py')}
+                    className="text-slate-500 hover:text-slate-800 flex items-center gap-1 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded"
+                  >
+                    <Copy className="w-3 h-3" />
+                    {copiedCmd === 'py' ? 'Kopiert!' : 'Befehl kopieren'}
+                  </button>
+                </div>
+                <div className="bg-slate-900 text-emerald-400 p-2.5 rounded-lg font-mono text-xs flex items-center justify-between">
+                  <code>python3 server.py 8000</code>
+                </div>
+              </div>
+
+              {/* Toggle to view raw script */}
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowCode((prev) => !prev)}
+                  className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1 font-medium underline"
+                >
+                  <Code2 className="w-3.5 h-3.5" />
+                  <span>{showCode ? 'Quellcode von server.py ausblenden' : 'Quellcode von server.py ansehen & kopieren'}</span>
+                </button>
+
+                {showCode && (
+                  <div className="mt-2 relative">
+                    <button
+                      onClick={() => copyToClipboard(SERVER_PY_SOURCE, 'source')}
+                      className="absolute top-2 right-2 px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded text-[11px] flex items-center gap-1 font-semibold"
+                    >
+                      <Copy className="w-3 h-3" />
+                      {copiedCmd === 'source' ? 'Gesamter Code kopiert!' : 'Code kopieren'}
+                    </button>
+                    <pre className="bg-slate-900 text-slate-200 p-3 rounded-lg font-mono text-[10px] max-h-56 overflow-y-auto whitespace-pre">
+                      {SERVER_PY_SOURCE}
+                    </pre>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -259,7 +338,7 @@ export const LanInfoModal: React.FC<LanInfoModalProps> = ({
             onClick={onClose}
             className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-bold text-xs transition-colors"
           >
-            Verstanden
+            Schließen
           </button>
         </div>
       </div>
