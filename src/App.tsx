@@ -12,6 +12,10 @@ import {
   validateEntireChain,
   calculateBalances,
 } from './utils/crypto';
+import {
+  generateRandomStudentTransaction,
+  getNextIrregularIntervalMs,
+} from './utils/autoGenerator';
 import { INITIAL_MISSIONS } from './data/learningContent';
 import { Navbar } from './components/Navbar';
 import { HeroBanner } from './components/HeroBanner';
@@ -61,6 +65,7 @@ export default function App() {
   const [isQuizOpen, setIsQuizOpen] = useState<boolean>(false);
   const [isGlossaryOpen, setIsGlossaryOpen] = useState<boolean>(false);
   const [isHashLabOpen, setIsHashLabOpen] = useState<boolean>(false);
+  const [isAutoGenerating, setIsAutoGenerating] = useState<boolean>(true);
 
   // Chain validation state
   const [isChainValid, setIsChainValid] = useState<boolean>(true);
@@ -117,6 +122,30 @@ export default function App() {
   const totalCoinsInCirculation = useMemo(() => {
     return Object.values(balances).reduce((sum, b) => sum + b.confirmed, 0);
   }, [balances]);
+
+  // Irregular automatic transaction generation in the background
+  useEffect(() => {
+    if (!isAutoGenerating) return;
+
+    let timeoutId: number;
+
+    const scheduleNext = () => {
+      const delay = getNextIrregularIntervalMs(); // between 14s and 28s
+      timeoutId = window.setTimeout(() => {
+        const newTx = generateRandomStudentTransaction(participants, balances);
+        if (newTx) {
+          setMempool((prev) => [newTx, ...prev]);
+        }
+        scheduleNext();
+      }, delay);
+    };
+
+    scheduleNext();
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [isAutoGenerating, participants, balances]);
 
   // Complete mission helper
   const markMissionCompleted = (missionId: string) => {
@@ -176,31 +205,10 @@ export default function App() {
   };
 
   const handleAddQuickTransaction = () => {
-    const samplePurposes = [
-      'Pausenbrot mit Schokocreme',
-      'Mathe-Heft ausgeliehen',
-      'Schulfest-Ticket',
-      'Volleyball-Miete',
-      'Comic-Tausch',
-    ];
-    const randomSender = participants[Math.floor(Math.random() * participants.length)];
-    let randomRecipient = participants[Math.floor(Math.random() * participants.length)];
-    while (randomRecipient.id === randomSender.id) {
-      randomRecipient = participants[Math.floor(Math.random() * participants.length)];
+    const newTx = generateRandomStudentTransaction(participants, balances);
+    if (newTx) {
+      setMempool((prev) => [newTx, ...prev]);
     }
-
-    const newTx: Transaction = {
-      id: `tx-quick-${Date.now()}`,
-      senderId: randomSender.id,
-      senderName: randomSender.name,
-      recipientId: randomRecipient.id,
-      recipientName: randomRecipient.name,
-      amount: Math.floor(Math.random() * 4) + 1,
-      purpose: samplePurposes[Math.floor(Math.random() * samplePurposes.length)],
-      timestamp: Date.now(),
-    };
-
-    setMempool((prev) => [newTx, ...prev]);
   };
 
   const handleTriggerMissionAction = (missionId: string) => {
@@ -360,6 +368,7 @@ export default function App() {
             setTamperTargetBlockIndex(idx);
             setIsTamperOpen(true);
           }}
+          mempoolCount={mempool.length}
         />
 
         {/* Split Grid: Mempool on Left, Classroom Missions on Right (if in labor view) */}
@@ -373,6 +382,8 @@ export default function App() {
                 setIsTransferOpen(true);
               }}
               onAddQuickTransaction={handleAddQuickTransaction}
+              isAutoGenerating={isAutoGenerating}
+              onToggleAutoGenerating={() => setIsAutoGenerating((prev) => !prev)}
             />
           </div>
 
@@ -473,6 +484,10 @@ export default function App() {
         mempool={mempool}
         participants={participants}
         onBlockMined={handleBlockMined}
+        onOpenTransfer={() => {
+          setTransferSenderId('user');
+          setIsTransferOpen(true);
+        }}
       />
 
       <TamperModal

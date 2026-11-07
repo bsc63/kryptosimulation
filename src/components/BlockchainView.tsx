@@ -20,12 +20,14 @@ interface BlockchainViewProps {
   blocks: Block[];
   onOpenMining: () => void;
   onOpenTamper: (blockIndex: number) => void;
+  mempoolCount: number;
 }
 
 export const BlockchainView: React.FC<BlockchainViewProps> = ({
   blocks,
   onOpenMining,
   onOpenTamper,
+  mempoolCount,
 }) => {
   const [expandedBlockIndex, setExpandedBlockIndex] = useState<number | null>(
     blocks.length > 0 ? blocks[blocks.length - 1].index : 0
@@ -54,10 +56,16 @@ export const BlockchainView: React.FC<BlockchainViewProps> = ({
 
         <button
           onClick={onOpenMining}
-          className="self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-700 rounded-md transition-colors"
+          disabled={mempoolCount === 0}
+          className={`self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+            mempoolCount === 0
+              ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+              : 'text-white bg-sky-600 hover:bg-sky-700 shadow-xs'
+          }`}
+          title={mempoolCount === 0 ? 'Keine Aufträge im Mempool vorhanden' : 'Wartende Transaktionen schürfen'}
         >
           <Cpu className="w-3.5 h-3.5" />
-          <span>Nächsten Block schürfen</span>
+          <span>{mempoolCount === 0 ? 'Warte auf Aufträge' : 'Nächsten Block schürfen'}</span>
         </button>
       </div>
 
@@ -195,13 +203,24 @@ export const BlockchainView: React.FC<BlockchainViewProps> = ({
                       </div>
                     </div>
 
-                    {/* Miner attribution */}
-                    <div className="flex items-center justify-between text-slate-600">
-                      <span className="text-slate-500">Miner:</span>
-                      <span className="font-semibold text-slate-800 flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-amber-500" />
-                        {block.minerName}
-                      </span>
+                    {/* Miner attribution & Effort */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-slate-600">
+                        <span className="text-slate-500">Miner:</span>
+                        <span className="font-semibold text-slate-800 flex items-center gap-1">
+                          <Sparkles className="w-3 h-3 text-amber-500" />
+                          {block.minerName}
+                        </span>
+                      </div>
+
+                      {block.miningDurationSeconds !== undefined && block.miningDurationSeconds > 0 && (
+                        <div className="flex items-center justify-between text-[10px] text-slate-500 bg-slate-50 px-2 py-1 rounded font-mono">
+                          <span>⏱️ Rechenzeit: {block.miningDurationSeconds}s</span>
+                          {block.hashesCalculated && (
+                            <span>{block.hashesCalculated.toLocaleString('de-DE')} Hashes</span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Transactions Summary */}

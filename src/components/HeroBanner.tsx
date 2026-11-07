@@ -51,10 +51,19 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
             </button>
             <button
               onClick={onOpenMining}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+              disabled={mempoolCount === 0}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg transition-colors ${
+                mempoolCount === 0
+                  ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                  : 'text-slate-800 bg-slate-100 hover:bg-slate-200'
+              }`}
             >
               <Cpu className="w-3.5 h-3.5 text-sky-600" />
-              <span>Mining-Rätsel lösen (+10 EDC)</span>
+              <span>
+                {mempoolCount > 0
+                  ? `Block schürfen (${mempoolCount} ${mempoolCount === 1 ? 'Auftrag' : 'Aufträge'})`
+                  : 'Warte auf Aufträge'}
+              </span>
             </button>
             <button
               onClick={onOpenHashLab}
