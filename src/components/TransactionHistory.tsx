@@ -24,18 +24,12 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     Transaction & { blockIndex?: number; status: 'confirmed' | 'pending' }
   > = [];
 
-  // 1. Mempool
-  mempool.forEach((tx) => {
-    allTransactions.push({
-      ...tx,
-      status: 'pending',
-    });
-  });
-
-  // 2. Confirmed in blocks (newest blocks first)
+  // 1. Confirmed in blocks (newest blocks first)
+  const minedIds = new Set<string>();
   for (let i = blocks.length - 1; i >= 0; i--) {
     const b = blocks[i];
     b.transactions.forEach((tx) => {
+      minedIds.add(tx.id);
       allTransactions.push({
         ...tx,
         blockIndex: b.index,
@@ -43,6 +37,16 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       });
     });
   }
+
+  // 2. Pending Mempool (only those not already in confirmed blocks)
+  mempool.forEach((tx) => {
+    if (!minedIds.has(tx.id)) {
+      allTransactions.unshift({
+        ...tx,
+        status: 'pending',
+      });
+    }
+  });
 
   // Filter by participant
   const filtered = allTransactions.filter((tx) => {
@@ -153,7 +157,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
 
                 return (
                   <tr
-                    key={tx.id}
+                    key={`${tx.status}-${tx.blockIndex !== undefined ? `b${tx.blockIndex}` : 'mem'}-${tx.id}`}
                     className={`hover:bg-slate-50/80 transition-colors ${
                       isCoinbase ? 'bg-amber-50/20' : ''
                     }`}

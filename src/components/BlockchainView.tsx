@@ -239,7 +239,7 @@ export const BlockchainView: React.FC<BlockchainViewProps> = ({
                       <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                         {block.transactions.map((tx) => (
                           <div
-                            key={tx.id}
+                            key={`b${block.index}-${tx.id}`}
                             className={`p-2 rounded border text-[11px] ${
                               tx.isCoinbase
                                 ? 'bg-amber-50/60 border-amber-200 text-amber-900'

@@ -406,7 +406,7 @@ export const MiningModal: React.FC<MiningModalProps> = ({
                   </span>
                   <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
                     {receipt.transactions.map((tx) => (
-                      <div key={tx.id} className="flex items-center justify-between p-1.5 bg-white border border-slate-200 rounded text-[10px]">
+                      <div key={`rcpt-${tx.id}`} className="flex items-center justify-between p-1.5 bg-white border border-slate-200 rounded text-[10px]">
                         <span className="truncate max-w-[200px] text-slate-700">
                           {tx.senderName} → {tx.recipientName}: <em>"{tx.purpose}"</em>
                         </span>
@@ -545,7 +545,7 @@ export const MiningModal: React.FC<MiningModalProps> = ({
                 </div>
                 <div className="space-y-1.5 max-h-24 overflow-y-auto pr-1">
                   {frozenTxs.map((tx) => (
-                    <div key={tx.id} className="flex items-center justify-between bg-white p-1.5 rounded border border-slate-200 text-[10px]">
+                    <div key={`mine-${tx.id}`} className="flex items-center justify-between bg-white p-1.5 rounded border border-slate-200 text-[10px]">
                       <span className="truncate max-w-[200px] text-slate-700 font-sans">
                         {tx.senderName} → {tx.recipientName}: <em>"{tx.purpose}"</em>
                       </span>
