@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Server,
   Download,
+  Wifi,
 } from 'lucide-react';
 import { downloadServerPy } from '../utils/serverScript';
 
@@ -20,6 +21,8 @@ interface HeroBannerProps {
   onOpenTransfer: () => void;
   onOpenHashLab: () => void;
   onOpenLanInfo?: () => void;
+  lanStatus?: 'connecting' | 'connected' | 'offline';
+  humanCount?: number;
 }
 
 export const HeroBanner: React.FC<HeroBannerProps> = ({
@@ -31,6 +34,8 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   onOpenTransfer,
   onOpenHashLab,
   onOpenLanInfo,
+  lanStatus = 'offline',
+  humanCount = 1,
 }) => {
   return (
     <div className="bg-white rounded-2xl border border-slate-200/90 p-6 sm:p-7 shadow-xs">
@@ -86,11 +91,46 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
           </div>
 
           {/* Dedicated Teacher & Classroom Server Strip */}
-          <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2.5 text-xs">
-            <span className="font-semibold text-slate-700 flex items-center gap-1.5">
-              <Server className="w-3.5 h-3.5 text-amber-600" />
+          <div className="mt-4 pt-3.5 border-t border-slate-100 flex flex-wrap items-center gap-2.5 text-xs">
+            <span className="font-bold text-slate-800 flex items-center gap-1.5">
+              <Server className="w-4 h-4 text-amber-600" />
               <span>Für Lehrkräfte:</span>
             </span>
+
+            {/* Button LAN-Server mit Live-Status (hierher verschoben) */}
+            {onOpenLanInfo && (
+              <button
+                type="button"
+                onClick={onOpenLanInfo}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer shadow-2xs ${
+                  lanStatus === 'connected'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                    : lanStatus === 'connecting'
+                    ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                    : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200/80'
+                }`}
+                title="Klassenraum-Netzwerk einrichten und verbundene Schüler anzeigen"
+              >
+                <Wifi
+                  className={`w-3.5 h-3.5 ${
+                    lanStatus === 'connected'
+                      ? 'text-emerald-600'
+                      : lanStatus === 'connecting'
+                      ? 'text-amber-500 animate-spin'
+                      : 'text-slate-500'
+                  }`}
+                />
+                <span>
+                  {lanStatus === 'connected'
+                    ? `LAN-Server aktiv (${humanCount} Schüler)`
+                    : lanStatus === 'connecting'
+                    ? 'Verbinde LAN...'
+                    : '📡 LAN-Server starten / Status'}
+                </span>
+              </button>
+            )}
+
+            {/* Button server.py herunterladen (1 Klick) */}
             <button
               type="button"
               onClick={downloadServerPy}
@@ -100,15 +140,6 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
               <Download className="w-3.5 h-3.5 text-amber-700" />
               <span>📥 server.py herunterladen (1 Klick)</span>
             </button>
-            {onOpenLanInfo && (
-              <button
-                type="button"
-                onClick={onOpenLanInfo}
-                className="text-sky-700 hover:text-sky-900 font-medium underline transition-colors"
-              >
-                LAN-Anleitung anzeigen
-              </button>
-            )}
           </div>
         </div>
 

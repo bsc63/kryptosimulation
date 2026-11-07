@@ -513,12 +513,7 @@ export default function App() {
           if (tab === 'quiz') setIsQuizOpen(true);
         }}
         onOpenGlossary={() => setIsGlossaryOpen(true)}
-        onOpenHashLab={() => setIsHashLabOpen(true)}
-        isChainValid={isChainValid}
         mempoolCount={mempool.length}
-        lanStatus={lanStatus}
-        humanCount={humanPlayerCount}
-        onOpenLanInfo={() => setIsLanInfoOpen(true)}
         currentUser={currentUser || undefined}
         userBalance={balances[currentUser?.id || 'user']?.confirmed ?? 25}
         onOpenJoinModal={() => setIsJoinModalOpen(true)}
@@ -565,6 +560,8 @@ export default function App() {
           }}
           onOpenHashLab={() => setIsHashLabOpen(true)}
           onOpenLanInfo={() => setIsLanInfoOpen(true)}
+          lanStatus={lanStatus}
+          humanCount={humanPlayerCount}
         />
 
         {/* Tab-Specific Content or Main Labor */}
