@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Block,
   Transaction,
@@ -16,6 +16,12 @@ import {
   generateRandomStudentTransaction,
   getNextIrregularIntervalMs,
 } from './utils/autoGenerator';
+import {
+  checkServerHealth,
+  registerPlayerOnServer,
+  broadcastTransactionToServer,
+  broadcastMinedBlockToServer,
+} from './services/network';
 import { INITIAL_MISSIONS } from './data/learningContent';
 import { Navbar } from './components/Navbar';
 import { HeroBanner } from './components/HeroBanner';
@@ -30,20 +36,19 @@ import { TamperModal } from './components/TamperModal';
 import { QuizModal } from './components/QuizModal';
 import { GlossaryModal } from './components/GlossaryModal';
 import { HashLabModal } from './components/HashLabModal';
-import confetti from 'canvas-confetti';
+import { JoinModal } from './components/JoinModal';
+import { LanInfoModal } from './components/LanInfoModal';
 import {
-  Sparkles,
   RotateCcw,
   BookOpen,
-  Cpu,
   Layers,
-  Award,
   AlertTriangle,
   Lightbulb,
 } from 'lucide-react';
 
 export default function App() {
-  const [participants] = useState<Participant[]>(INITIAL_PARTICIPANTS);
+  const [participants, setParticipants] = useState<Participant[]>(INITIAL_PARTICIPANTS);
+  const [currentUser, setCurrentUser] = useState<Participant | null>(null);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [originalBlocks, setOriginalBlocks] = useState<Block[]>([]);
   const [mempool, setMempool] = useState<Transaction[]>([]);
@@ -65,13 +70,43 @@ export default function App() {
   const [isQuizOpen, setIsQuizOpen] = useState<boolean>(false);
   const [isGlossaryOpen, setIsGlossaryOpen] = useState<boolean>(false);
   const [isHashLabOpen, setIsHashLabOpen] = useState<boolean>(false);
+  const [isJoinModalOpen, setIsJoinModalOpen] = useState<boolean>(false);
+  const [isLanInfoOpen, setIsLanInfoOpen] = useState<boolean>(false);
   const [isAutoGenerating, setIsAutoGenerating] = useState<boolean>(true);
+
+  // LAN network multiplayer state
+  const [lanStatus, setLanStatus] = useState<'connecting' | 'connected' | 'offline'>('connecting');
 
   // Chain validation state
   const [isChainValid, setIsChainValid] = useState<boolean>(true);
   const [brokenBlockIndex, setBrokenBlockIndex] = useState<number | null>(null);
 
-  // Initialize blockchain on first load
+  // Load saved player profile from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('kryptokette_player');
+      if (saved) {
+        const parsed: Participant = JSON.parse(saved);
+        if (parsed && parsed.name) {
+          setCurrentUser(parsed);
+          setTransferSenderId(parsed.id);
+          setParticipants((prev) => {
+            const idx = prev.findIndex((p) => p.id === parsed.id || p.id === 'user');
+            if (idx >= 0) {
+              const copy = [...prev];
+              copy[idx] = parsed;
+              return copy;
+            }
+            return [parsed, ...prev];
+          });
+        }
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }, []);
+
+  // Initialize blockchain locally first (Genesis + Block 1)
   useEffect(() => {
     async function initBlockchain() {
       setIsLoading(true);
@@ -96,10 +131,10 @@ export default function App() {
         },
         {
           id: 'tx-seed-pending-2',
-          senderId: 'user',
-          senderName: 'Du (Schüler/in)',
-          recipientId: 'lukas',
-          recipientName: 'Lukas',
+          senderId: 'lukas',
+          senderName: 'Lukas',
+          recipientId: 'mia',
+          recipientName: 'Mia',
           amount: 4,
           purpose: 'Gaming-Mauspad ausgeliehen',
           timestamp: Date.now() - 120000,
@@ -112,8 +147,154 @@ export default function App() {
     initBlockchain();
   }, []);
 
+  // Connect to LAN Server (SSE Stream) for real-time classroom multiplayer
+  const connectToLanServer = useCallback(async () => {
+    setLanStatus('connecting');
+    const isReachable = await checkServerHealth();
+    if (!isReachable) {
+      setLanStatus('offline');
+      return null;
+    }
 
-  // Compute live balances
+    try {
+      const eventSource = new EventSource('/api/events');
+
+      eventSource.addEventListener('init', async (e: MessageEvent) => {
+        setLanStatus('connected');
+        try {
+          const data = JSON.parse(e.data);
+          if (data.chain && data.chain.length > 0) {
+            const validation = await validateEntireChain(data.chain);
+            setBlocks(validation.validatedBlocks);
+            setOriginalBlocks(JSON.parse(JSON.stringify(validation.validatedBlocks)));
+            setIsChainValid(validation.isValid);
+            setBrokenBlockIndex(validation.brokenIndex);
+          }
+          if (Array.isArray(data.mempool)) {
+            setMempool(data.mempool);
+          }
+          if (Array.isArray(data.participants) && data.participants.length > 0) {
+            setParticipants((prev) => {
+              // Merge server participants with current local user if present
+              const serverList: Participant[] = data.participants;
+              if (currentUser && !serverList.some((p) => p.id === currentUser.id)) {
+                return [...serverList, currentUser];
+              }
+              return serverList;
+            });
+          }
+        } catch (err) {
+          console.error('SSE init error:', err);
+        }
+      });
+
+      eventSource.addEventListener('participant_joined', (e: MessageEvent) => {
+        try {
+          const { player, participants: serverList } = JSON.parse(e.data);
+          if (Array.isArray(serverList)) {
+            setParticipants(serverList);
+          } else if (player) {
+            setParticipants((prev) => {
+              const idx = prev.findIndex((p) => p.id === player.id);
+              if (idx >= 0) {
+                const copy = [...prev];
+                copy[idx] = player;
+                return copy;
+              }
+              return [...prev, player];
+            });
+          }
+        } catch (err) {
+          console.error('participant_joined error:', err);
+        }
+      });
+
+      eventSource.addEventListener('transaction_added', (e: MessageEvent) => {
+        try {
+          const { transaction, mempool: serverMempool } = JSON.parse(e.data);
+          if (Array.isArray(serverMempool)) {
+            setMempool(serverMempool);
+          } else if (transaction) {
+            setMempool((prev) =>
+              prev.some((t) => t.id === transaction.id) ? prev : [transaction, ...prev]
+            );
+          }
+        } catch (err) {
+          console.error('transaction_added error:', err);
+        }
+      });
+
+      eventSource.addEventListener('block_mined', async (e: MessageEvent) => {
+        try {
+          const { chain: serverChain, mempool: serverMempool } = JSON.parse(e.data);
+          if (Array.isArray(serverChain)) {
+            const validation = await validateEntireChain(serverChain);
+            setBlocks(validation.validatedBlocks);
+            setOriginalBlocks(JSON.parse(JSON.stringify(validation.validatedBlocks)));
+            setIsChainValid(validation.isValid);
+            setBrokenBlockIndex(validation.brokenIndex);
+          }
+          if (Array.isArray(serverMempool)) {
+            setMempool(serverMempool);
+          }
+        } catch (err) {
+          console.error('block_mined error:', err);
+        }
+      });
+
+      eventSource.addEventListener('chain_reset', async (e: MessageEvent) => {
+        try {
+          const { chain: serverChain, mempool: serverMempool, participants: serverList } = JSON.parse(e.data);
+          if (Array.isArray(serverChain)) {
+            const validation = await validateEntireChain(serverChain);
+            setBlocks(validation.validatedBlocks);
+            setOriginalBlocks(JSON.parse(JSON.stringify(validation.validatedBlocks)));
+            setIsChainValid(true);
+            setBrokenBlockIndex(null);
+          }
+          if (Array.isArray(serverMempool)) setMempool(serverMempool);
+          if (Array.isArray(serverList)) setParticipants(serverList);
+        } catch (err) {
+          console.error('chain_reset error:', err);
+        }
+      });
+
+      eventSource.onopen = () => {
+        setLanStatus('connected');
+      };
+
+      eventSource.onerror = () => {
+        setLanStatus('offline');
+      };
+
+      return eventSource;
+    } catch {
+      setLanStatus('offline');
+      return null;
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    let sseInstance: EventSource | null = null;
+    connectToLanServer().then((res) => {
+      sseInstance = res;
+    });
+
+    return () => {
+      if (sseInstance) {
+        sseInstance.close();
+      }
+    };
+  }, [connectToLanServer]);
+
+  // If local user is known and LAN is active, register player on server
+  useEffect(() => {
+    if (lanStatus === 'connected' && currentUser) {
+      registerPlayerOnServer(currentUser);
+    }
+  }, [lanStatus, currentUser]);
+
+  // Compute live balances across participants
   const balances = useMemo(() => {
     return calculateBalances(participants, blocks, mempool);
   }, [participants, blocks, mempool]);
@@ -123,14 +304,20 @@ export default function App() {
     return Object.values(balances).reduce((sum, b) => sum + b.confirmed, 0);
   }, [balances]);
 
-  // Irregular automatic transaction generation in the background
+  // Count human players
+  const humanPlayerCount = useMemo(() => {
+    return participants.filter((p) => p.isHumanPlayer || p.id === 'user' || p.isCurrentUser).length;
+  }, [participants]);
+
+  // Irregular automatic transaction generation in offline mode
+  // (In online LAN mode, the central server broadcasts shared bot transactions)
   useEffect(() => {
-    if (!isAutoGenerating) return;
+    if (!isAutoGenerating || lanStatus === 'connected') return;
 
     let timeoutId: number;
 
     const scheduleNext = () => {
-      const delay = getNextIrregularIntervalMs(); // between 14s and 28s
+      const delay = getNextIrregularIntervalMs();
       timeoutId = window.setTimeout(() => {
         const newTx = generateRandomStudentTransaction(participants, balances);
         if (newTx) {
@@ -145,7 +332,7 @@ export default function App() {
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [isAutoGenerating, participants, balances]);
+  }, [isAutoGenerating, lanStatus, participants, balances]);
 
   // Complete mission helper
   const markMissionCompleted = (missionId: string) => {
@@ -155,9 +342,13 @@ export default function App() {
   };
 
   // Handlers
-  const handleSendTransaction = (newTx: Transaction) => {
+  const handleSendTransaction = async (newTx: Transaction) => {
     setMempool((prev) => [newTx, ...prev]);
     markMissionCompleted('m1_tx');
+
+    if (lanStatus === 'connected') {
+      await broadcastTransactionToServer(newTx);
+    }
   };
 
   const handleBlockMined = async (newBlock: Block) => {
@@ -169,11 +360,15 @@ export default function App() {
     setIsChainValid(validation.isValid);
     setBrokenBlockIndex(validation.brokenIndex);
 
-    // Clear mined transactions from mempool (except the coinbase tx which was created fresh)
+    // Clear mined transactions from mempool (except the coinbase tx)
     const minedTxIds = new Set(newBlock.transactions.map((t) => t.id));
     setMempool((prev) => prev.filter((t) => !minedTxIds.has(t.id)));
 
     markMissionCompleted('m2_mine');
+
+    if (lanStatus === 'connected') {
+      await broadcastMinedBlockToServer(newBlock);
+    }
   };
 
   const handleTamperBlock = async (blockIndex: number, updatedTransactions: Transaction[]) => {
@@ -204,17 +399,20 @@ export default function App() {
     setBrokenBlockIndex(null);
   };
 
-  const handleAddQuickTransaction = () => {
+  const handleAddQuickTransaction = async () => {
     const newTx = generateRandomStudentTransaction(participants, balances);
     if (newTx) {
       setMempool((prev) => [newTx, ...prev]);
+      if (lanStatus === 'connected') {
+        await broadcastTransactionToServer(newTx);
+      }
     }
   };
 
   const handleTriggerMissionAction = (missionId: string) => {
     switch (missionId) {
       case 'm1_tx':
-        setTransferSenderId('user');
+        setTransferSenderId(currentUser?.id || 'user');
         setIsTransferOpen(true);
         break;
       case 'm2_mine':
@@ -229,6 +427,26 @@ export default function App() {
         break;
       default:
         break;
+    }
+  };
+
+  const handleJoinPlayer = async (player: Participant) => {
+    setCurrentUser(player);
+    setTransferSenderId(player.id);
+    localStorage.setItem('kryptokette_player', JSON.stringify(player));
+
+    setParticipants((prev) => {
+      const idx = prev.findIndex((p) => p.id === player.id || (player.isCurrentUser && p.id === 'user'));
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = player;
+        return copy;
+      }
+      return [...prev, player];
+    });
+
+    if (lanStatus === 'connected') {
+      await registerPlayerOnServer(player);
     }
   };
 
@@ -254,6 +472,14 @@ export default function App() {
       ]);
       setIsChainValid(true);
       setBrokenBlockIndex(null);
+
+      if (lanStatus === 'connected') {
+        try {
+          await fetch('/api/reset', { method: 'POST' });
+        } catch {
+          // ignore
+        }
+      }
     }
   };
 
@@ -287,13 +513,18 @@ export default function App() {
           if (tab === 'quiz') setIsQuizOpen(true);
         }}
         onOpenTransfer={() => {
-          setTransferSenderId('user');
+          setTransferSenderId(currentUser?.id || 'user');
           setIsTransferOpen(true);
         }}
         onOpenGlossary={() => setIsGlossaryOpen(true)}
         onOpenHashLab={() => setIsHashLabOpen(true)}
         isChainValid={isChainValid}
         mempoolCount={mempool.length}
+        lanStatus={lanStatus}
+        humanCount={humanPlayerCount}
+        onOpenLanInfo={() => setIsLanInfoOpen(true)}
+        currentUser={currentUser || undefined}
+        onOpenJoinModal={() => setIsJoinModalOpen(true)}
       />
 
       {/* Main Container */}
@@ -332,7 +563,7 @@ export default function App() {
           isChainValid={isChainValid}
           onOpenMining={() => setIsMiningOpen(true)}
           onOpenTransfer={() => {
-            setTransferSenderId('user');
+            setTransferSenderId(currentUser?.id || 'user');
             setIsTransferOpen(true);
           }}
           onOpenHashLab={() => setIsHashLabOpen(true)}
@@ -358,6 +589,8 @@ export default function App() {
             setTransferSenderId(senderId);
             setIsTransferOpen(true);
           }}
+          onOpenJoinModal={() => setIsJoinModalOpen(true)}
+          currentUser={currentUser || undefined}
         />
 
         {/* Blockchain Horizontal View */}
@@ -371,14 +604,14 @@ export default function App() {
           mempoolCount={mempool.length}
         />
 
-        {/* Split Grid: Mempool on Left, Classroom Missions on Right (if in labor view) */}
+        {/* Split Grid: Mempool on Left, Classroom Missions on Right */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-5">
             <MempoolCard
               mempool={mempool}
               onOpenMining={() => setIsMiningOpen(true)}
               onOpenTransfer={() => {
-                setTransferSenderId('user');
+                setTransferSenderId(currentUser?.id || 'user');
                 setIsTransferOpen(true);
               }}
               onAddQuickTransaction={handleAddQuickTransaction}
@@ -436,6 +669,12 @@ export default function App() {
           </div>
           <div className="flex items-center gap-4">
             <button
+              onClick={() => setIsLanInfoOpen(true)}
+              className="hover:text-slate-800 transition-colors flex items-center gap-1"
+            >
+              LAN Netzwerk
+            </button>
+            <button
               onClick={() => setIsGlossaryOpen(true)}
               className="hover:text-slate-800 transition-colors"
             >
@@ -485,7 +724,7 @@ export default function App() {
         participants={participants}
         onBlockMined={handleBlockMined}
         onOpenTransfer={() => {
-          setTransferSenderId('user');
+          setTransferSenderId(currentUser?.id || 'user');
           setIsTransferOpen(true);
         }}
       />
@@ -519,6 +758,25 @@ export default function App() {
       <HashLabModal
         isOpen={isHashLabOpen}
         onClose={() => setIsHashLabOpen(false)}
+      />
+
+      <JoinModal
+        isOpen={isJoinModalOpen}
+        onClose={() => setIsJoinModalOpen(false)}
+        onJoin={handleJoinPlayer}
+        currentPlayer={currentUser || undefined}
+      />
+
+      <LanInfoModal
+        isOpen={isLanInfoOpen}
+        onClose={() => setIsLanInfoOpen(false)}
+        lanStatus={lanStatus}
+        participants={participants}
+        onOpenJoinModal={() => {
+          setIsLanInfoOpen(false);
+          setIsJoinModalOpen(true);
+        }}
+        onRefreshConnection={connectToLanServer}
       />
     </div>
   );

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Participant } from '../types/blockchain';
-import { Coins, Send, ArrowUpRight, ArrowDownLeft, UserCheck } from 'lucide-react';
+import { Coins, Send, ArrowUpRight, ArrowDownLeft, UserCheck, UserPlus, Bot, User } from 'lucide-react';
 
 interface ParticipantsBarProps {
   participants: Participant[];
@@ -8,6 +8,8 @@ interface ParticipantsBarProps {
   activeParticipantId: string;
   onSelectParticipant: (id: string) => void;
   onQuickSend: (senderId: string) => void;
+  onOpenJoinModal?: () => void;
+  currentUser?: Participant;
 }
 
 export const ParticipantsBar: React.FC<ParticipantsBarProps> = ({
@@ -16,10 +18,12 @@ export const ParticipantsBar: React.FC<ParticipantsBarProps> = ({
   activeParticipantId,
   onSelectParticipant,
   onQuickSend,
+  onOpenJoinModal,
+  currentUser,
 }) => {
   return (
     <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-xs">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-100">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
         <div>
           <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <span>Teilnehmer im Blockchain-Netzwerk</span>
@@ -31,9 +35,20 @@ export const ParticipantsBar: React.FC<ParticipantsBarProps> = ({
             Jeder Schüler besitzt ein eigenes Wallet mit Adresse und Kontostand. Klicke auf ein Wallet, um dessen Transaktionen anzuzeigen.
           </p>
         </div>
-        <div className="text-xs text-slate-500 flex items-center gap-2 self-start sm:self-auto">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-          <span>Währung: <strong>EduCoin (EDC)</strong></span>
+        <div className="flex items-center gap-3 self-start sm:self-auto">
+          {onOpenJoinModal && (
+            <button
+              onClick={onOpenJoinModal}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200/80 rounded-lg transition-colors"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>{currentUser ? 'Mein Wallet anpassen' : '+ Als Mitschüler beitreten'}</span>
+            </button>
+          )}
+          <div className="text-xs text-slate-500 flex items-center gap-2 hidden md:flex">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>Währung: <strong>EduCoin (EDC)</strong></span>
+          </div>
         </div>
       </div>
 
@@ -41,7 +56,8 @@ export const ParticipantsBar: React.FC<ParticipantsBarProps> = ({
         {participants.map((p) => {
           const balance = balances[p.id] || { confirmed: p.initialBalance, pendingChange: 0 };
           const isSelected = activeParticipantId === p.id;
-          const isUser = p.id === 'user';
+          const isUser = p.id === 'user' || p.id === currentUser?.id || p.isCurrentUser;
+          const isHuman = p.isHumanPlayer || isUser;
 
           return (
             <div
@@ -53,9 +69,19 @@ export const ParticipantsBar: React.FC<ParticipantsBarProps> = ({
                   : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/50'
               }`}
             >
-              {isUser && (
-                <div className="absolute -top-2 right-2 bg-sky-600 text-white text-[10px] font-semibold px-2 py-0.2 rounded-full uppercase tracking-wider">
+              {isUser ? (
+                <div className="absolute -top-2 right-2 bg-sky-600 text-white text-[10px] font-semibold px-2 py-0.2 rounded-full uppercase tracking-wider shadow-xs">
                   Du
+                </div>
+              ) : isHuman ? (
+                <div className="absolute -top-2 right-2 bg-emerald-600 text-white text-[10px] font-semibold px-2 py-0.2 rounded-full tracking-wider shadow-xs flex items-center gap-0.5">
+                  <User className="w-2.5 h-2.5" />
+                  Schüler
+                </div>
+              ) : (
+                <div className="absolute -top-2 right-2 bg-slate-200 text-slate-700 text-[9px] font-medium px-1.5 py-0.2 rounded-full flex items-center gap-0.5">
+                  <Bot className="w-2.5 h-2.5" />
+                  Bot
                 </div>
               )}
 

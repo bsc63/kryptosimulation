@@ -39,6 +39,25 @@ export interface Participant {
   role: string;
   description: string;
   initialBalance: number;
+  isHumanPlayer?: boolean;
+  isCurrentUser?: boolean;
+  joinedAt?: number;
+}
+
+export interface MiningReceipt {
+  blockIndex: number;
+  minerName: string;
+  minerId: string;
+  minerAvatar: string;
+  rewardAmount: number;
+  nonce: number;
+  hash: string;
+  difficulty: number;
+  durationSeconds: number;
+  attempts: number;
+  timestamp: number;
+  transactionCount: number;
+  transactions: Transaction[];
 }
 
 export interface Mission {
