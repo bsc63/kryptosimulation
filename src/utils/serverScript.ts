@@ -5,14 +5,16 @@
 
 export const SERVER_PY_SOURCE = `#!/usr/bin/env python3
 """
-KryptoKette - Lokaler Python Schul-Netzwerk-Server
-==================================================
-Dieser eigenständige Python-Server ermöglicht es Lehrkräften, die Blockchain-Simulation
-ohne Node.js oder npm direkt im lokalen Netzwerk (LAN / Schul-WLAN) zu starten.
+KryptoKette - Lokaler Multi-User Schul-Netzwerk-Server (Python 3)
+================================================================
+Dieser eigenständige Python-Server ermöglicht es Lehrkräften und Schulklassen,
+die Blockchain-Simulation gemeinsam im lokalen Netzwerk (WLAN / LAN) zu spielen.
 
-Nutzung:
-    python3 server.py [PORT]
-    (Standard-Port: 8050 - weicht automatisch aus, falls belegt!)
+Features:
+- Echtes Multi-Threading: Beliebig viele Schüler, Smartphones & Browser gleichzeitig!
+- Thread-sicheres Server-Sent Events (SSE) Streaming für Live-Transaktionen
+- Reines Standard-Python ohne externe Abhängigkeiten (kein pip, kein npm)
+- Automatische Port- und IP-Erkennung mit Firewall-Hinweisen (z. B. für Linux Mint)
 """
 
 import http.server
@@ -23,6 +25,7 @@ import os
 import sys
 import time
 import threading
+import queue
 import mimetypes
 from urllib.parse import urlparse
 
@@ -34,6 +37,8 @@ mimetypes.init()
 mimetypes.add_type('application/javascript', '.js')
 mimetypes.add_type('text/css', '.css')
 mimetypes.add_type('text/html', '.html')
+mimetypes.add_type('image/svg+xml', '.svg')
+mimetypes.add_type('application/json', '.json')
 
 # Authoritative In-Memory Blockchain State
 STATE_LOCK = threading.Lock()
@@ -187,23 +192,19 @@ state = {
     "participants": list(INITIAL_PARTICIPANTS),
 }
 
-# Connected SSE Clients
-sse_clients = []
+# Connected SSE Client Queues (Thread-safe pub/sub architecture)
+sse_queues = []
 sse_lock = threading.Lock()
 
 def broadcast_event(event_type, data):
+    """Pushes an event payload to all currently connected client queues."""
     payload = f"event: {event_type}\\ndata: {json.dumps(data)}\\n\\n".encode('utf-8')
     with sse_lock:
-        to_remove = []
-        for client in sse_clients:
+        for q in list(sse_queues):
             try:
-                client.wfile.write(payload)
-                client.wfile.flush()
+                q.put_nowait(payload)
             except Exception:
-                to_remove.append(client)
-        for dead in to_remove:
-            if dead in sse_clients:
-                sse_clients.remove(dead)
+                pass
 
 # Determine static files directory (docs or dist) relative to this script's directory
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -219,21 +220,46 @@ elif os.path.exists(os.path.join(SCRIPT_DIR, "index.html")):
 else:
     STATIC_DIR = docs_path if os.path.exists(docs_path) else SCRIPT_DIR
 
-def get_local_ip():
-    """Finds the LAN IP address of this machine to display on the blackboard."""
+def get_all_local_ips():
+    """Detects available LAN / WLAN IP addresses to help teachers and students connect."""
+    ips = []
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.settimeout(0.1)
         s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
+        primary = s.getsockname()[0]
         s.close()
-        return ip
+        if primary and primary != "127.0.0.1":
+            ips.append(primary)
     except Exception:
-        return "127.0.0.1"
+        pass
+
+    try:
+        hostname = socket.gethostname()
+        for addr in socket.gethostbyname_ex(hostname)[2]:
+            if addr not in ips and not addr.startswith("127."):
+                ips.append(addr)
+    except Exception:
+        pass
+
+    return ips if ips else ["127.0.0.1"]
+
+class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    """
+    Multi-threaded HTTP Server:
+    Handles each incoming browser/phone connection in its own independent thread.
+    Prevents persistent SSE connections from blocking new HTTP requests.
+    """
+    daemon_threads = True
+    allow_reuse_address = True
 
 class BlockchainRequestHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=STATIC_DIR, **kwargs)
+
+    def log_message(self, format, *args):
+        if "GET /assets/" not in format % args and "GET /api/events" not in format % args:
+            super().log_message(format, *args)
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -248,31 +274,51 @@ class BlockchainRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(data.encode('utf-8'))
             return
 
+        if parsed.path == "/api/health":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(b'{"status":"ok"}')
+            return
+
         if parsed.path == "/api/events":
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
-            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Cache-Control", "no-cache, no-transform")
             self.send_header("Connection", "keep-alive")
+            self.send_header("X-Accel-Buffering", "no")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
 
+            # Dedicated message queue for this client connection
+            client_queue = queue.Queue(maxsize=100)
+            with sse_lock:
+                sse_queues.append(client_queue)
+
             with STATE_LOCK:
                 init_payload = f"event: init\\ndata: {json.dumps(state)}\\n\\n".encode('utf-8')
-            self.wfile.write(init_payload)
-            self.wfile.flush()
-
-            with sse_lock:
-                sse_clients.append(self)
 
             try:
+                self.wfile.write(init_payload)
+                self.wfile.flush()
+
                 while True:
-                    time.sleep(15)
-                    self.wfile.write(b": ping\\n\\n")
-                    self.wfile.flush()
+                    try:
+                        msg = client_queue.get(timeout=15)
+                        self.wfile.write(msg)
+                        self.wfile.flush()
+                    except queue.Empty:
+                        self.wfile.write(b": ping\\n\\n")
+                        self.wfile.flush()
+            except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError):
+                pass
             except Exception:
+                pass
+            finally:
                 with sse_lock:
-                    if self in sse_clients:
-                        sse_clients.remove(self)
+                    if client_queue in sse_queues:
+                        sse_queues.remove(client_queue)
             return
 
         # Fallback to SPA routing (if file not found, serve index.html)
@@ -307,7 +353,7 @@ class BlockchainRequestHandler(http.server.SimpleHTTPRequestHandler):
                 current_participants = list(state["participants"])
 
             broadcast_event("participant_joined", {"player": player, "participants": current_participants})
-            print(f"👋 [Schul-Netzwerk] Neuer Schüler beigetreten: {player.get('name')} ({player.get('grade')})")
+            print(f"👋 [Schul-Netzwerk] Neuer Teilnehmer beigetreten: {player.get('name')} ({player.get('grade', 'Gast')})")
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -336,7 +382,6 @@ class BlockchainRequestHandler(http.server.SimpleHTTPRequestHandler):
             new_block = req_data
             with STATE_LOCK:
                 state["chain"].append(new_block)
-                # Remove mined transactions from mempool
                 mined_ids = {t["id"] for t in new_block.get("transactions", [])}
                 state["mempool"] = [t for t in state["mempool"] if t["id"] not in mined_ids]
                 current_chain = list(state["chain"])
@@ -386,7 +431,7 @@ class BlockchainRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        # Prevent browser caching so Chromium / Firefox never show stale cached apps or old projects
+        # Prevent browser caching so Chromium / Firefox / Mobile never serve stale cached apps
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
@@ -397,32 +442,34 @@ class BlockchainRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
 def run_server():
-    local_ip = get_local_ip()
+    all_ips = get_all_local_ips()
     target_port = PORT
     httpd = None
 
-    socketserver.TCPServer.allow_reuse_address = True
-
     while httpd is None:
         try:
-            httpd = socketserver.TCPServer(("0.0.0.0", target_port), BlockchainRequestHandler)
+            httpd = ThreadingHTTPServer(("0.0.0.0", target_port), BlockchainRequestHandler)
         except OSError as e:
-            print(f"⚠️ Port {target_port} wird bereits von einem anderen Programm belegt! ({e})")
+            print(f"⚠️ Port {target_port} wird bereits belegt ({e})!")
             print(f"   Weiche automatisch auf Port {target_port + 1} aus...")
             target_port += 1
 
-    print("=" * 66)
-    print("🎓 KRYPTOKETTE - LOKALER SCHUL-NETZWERK-SERVER (PYTHON)")
-    print("=" * 66)
-    print(f"📡 Status: Server läuft im lokalen Netzwerk!")
-    print(f"👉 URL für Schüler (an die Tafel schreiben):")
-    print(f"   http://{local_ip}:{target_port}")
-    if target_port != 8000:
-        print(f"   (Hinweis: Port {target_port} verhindert Port-Konflikte mit älteren Apps!)")
-    print("=" * 66)
-    print("Jeder Schüler, der diese Adresse aufruft, kann seinen Namen eingeben,")
-    print("erhält ein eigenes Wallet und handelt live mit den Mitschülern & Bots!")
-    print("=" * 66)
+    print("=" * 72)
+    print("🎓 KRYPTOKETTE - LOKALER SCHUL-NETZWERK-SERVER (MULTI-THREADED)")
+    print("=" * 72)
+    print("📡 Status: Server läuft im lokalen Netzwerk!")
+    print("👥 Gleichzeitige Verbindungen: Unbegrenzt (Chromium, Firefox, Smartphones)")
+    print("-" * 72)
+    print("👉 URL für Schüler & Smartphones (an die Tafel schreiben):")
+    for ip in all_ips:
+        print(f"   http://{ip}:{target_port}")
+    print("=" * 72)
+    print("💡 HINWEIS FÜR LINUX MINT / UBUNTU (falls Smartphones nicht laden):")
+    print("   Falls andere Geräte im WLAN die Seite nicht aufrufen können,")
+    print(f"   gib den Port kurz in der Linux-Firewall frei:")
+    print(f"   sudo ufw allow {target_port}/tcp")
+    print("=" * 72)
+    print("Server aktiv. Zum Beenden Strg + C drücken.\\n")
 
     try:
         httpd.serve_forever()

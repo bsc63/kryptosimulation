@@ -267,6 +267,25 @@ export const LanInfoModal: React.FC<LanInfoModalProps> = ({
                 <p className="text-[10px] text-slate-500 pt-0.5">
                   💡 <strong>Keine Port-Konflikte:</strong> Nutzt automatisch Port 8050 statt 8000. Falls Chromium noch eine alte Web-App anzeigt: drücke <kbd className="bg-slate-100 px-1 py-0.5 rounded border border-slate-300 font-mono text-[9px]">Strg + Umschalt + R</kbd> (Hard Refresh) oder öffne ein privates Fenster.
                 </p>
+
+                {/* Multi-Device & Linux Mint Firewall Note */}
+                <div className="p-2.5 bg-slate-100/90 border border-slate-200 rounded-lg text-[11px] text-slate-700 space-y-1.5 mt-2">
+                  <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                    <span>📱 Linux Mint / Ubuntu & Smartphones im WLAN:</span>
+                  </div>
+                  <p className="text-[10px] leading-relaxed">
+                    Dank <strong>Multi-Threading</strong> können nun beliebig viele Geräte gleichzeitig (Chromium, Firefox und Mobilgeräte) auf den Server zugreifen. Falls ein Smartphone im WLAN die Seite nicht aufrufen kann, blockiert Linux Mint eingehende Ports. Mit diesem Befehl im Linux-Terminal erlauben:
+                  </p>
+                  <div className="flex items-center justify-between bg-slate-900 text-emerald-400 p-1.5 rounded font-mono text-[10px]">
+                    <code>sudo ufw allow 8050/tcp</code>
+                    <button
+                      onClick={() => copyToClipboard('sudo ufw allow 8050/tcp', 'ufw')}
+                      className="text-slate-400 hover:text-white px-1.5 py-0.5 rounded text-[9px] bg-slate-800 cursor-pointer"
+                    >
+                      {copiedCmd === 'ufw' ? 'Kopiert!' : 'Kopieren'}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Toggle to view raw script */}
