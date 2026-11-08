@@ -9,6 +9,7 @@ interface TransferModalProps {
   balances: Record<string, { confirmed: number; pendingChange: number }>;
   defaultSenderId?: string;
   onSendTransaction: (newTx: Transaction) => void;
+  currentUser?: Participant;
 }
 
 const PRESET_PURPOSES = [
@@ -24,21 +25,85 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   onClose,
   participants,
   balances,
-  defaultSenderId = 'user',
+  defaultSenderId,
   onSendTransaction,
+  currentUser,
 }) => {
-  const [senderId, setSenderId] = useState<string>(defaultSenderId);
-  const [recipientId, setRecipientId] = useState<string>(
-    defaultSenderId === 'mia' ? 'lukas' : 'mia'
-  );
+  // Determine allowed senders based on rule:
+  // If a student wallet is created, transfers can only be made from that wallet, OR between bots.
+  const allowedSenders = React.useMemo(() => {
+    if (currentUser) {
+      return participants.filter(
+        (p) => p.id === currentUser.id || (!p.isHumanPlayer && p.id !== 'user')
+      );
+    }
+    return participants;
+  }, [participants, currentUser]);
+
+  const initialSenderId = React.useMemo(() => {
+    if (currentUser) {
+      if (defaultSenderId && allowedSenders.some((p) => p.id === defaultSenderId)) {
+        return defaultSenderId;
+      }
+      return currentUser.id;
+    }
+    return defaultSenderId || participants[0]?.id || 'mia';
+  }, [currentUser, defaultSenderId, allowedSenders, participants]);
+
+  const [senderId, setSenderId] = useState<string>(initialSenderId);
+
+  // Sync senderId when modal opens
+  React.useEffect(() => {
+    if (isOpen) {
+      if (currentUser) {
+        if (defaultSenderId && allowedSenders.some((p) => p.id === defaultSenderId)) {
+          setSenderId(defaultSenderId);
+        } else {
+          setSenderId(currentUser.id);
+        }
+      } else if (defaultSenderId) {
+        setSenderId(defaultSenderId);
+      }
+    }
+  }, [isOpen, currentUser, defaultSenderId, allowedSenders]);
+
+  const sender = participants.find((p) => p.id === senderId) || allowedSenders[0] || participants[0];
+
+  // Allowed recipients:
+  // - If sender is currentUser: can send to anyone except themselves
+  // - If sender is a bot: can only send to other bots ("oder zwischen Bots")
+  const isSenderCurrentUser = Boolean(currentUser && sender.id === currentUser.id);
+  const isSenderBot = Boolean(!sender.isHumanPlayer && (!currentUser || sender.id !== currentUser.id));
+
+  const allowedRecipients = React.useMemo(() => {
+    if (isSenderBot) {
+      // Bot to bot only
+      return participants.filter((p) => p.id !== sender.id && !p.isHumanPlayer && p.id !== 'user');
+    }
+    // Student can send to anyone except themselves
+    return participants.filter((p) => p.id !== sender.id);
+  }, [participants, sender.id, isSenderBot]);
+
+  const [recipientId, setRecipientId] = useState<string>(() => {
+    return allowedRecipients[0]?.id || (sender.id === 'mia' ? 'lukas' : 'mia');
+  });
+
+  // Re-adjust recipient if no longer in allowed list
+  React.useEffect(() => {
+    if (!allowedRecipients.some((p) => p.id === recipientId)) {
+      if (allowedRecipients.length > 0) {
+        setRecipientId(allowedRecipients[0].id);
+      }
+    }
+  }, [senderId, allowedRecipients, recipientId]);
+
   const [amount, setAmount] = useState<number>(3);
   const [purpose, setPurpose] = useState<string>('Pausensnack in der 2. Pause');
   const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const sender = participants.find((p) => p.id === senderId) || participants[0];
-  const recipient = participants.find((p) => p.id === recipientId) || participants[1];
+  const recipient = participants.find((p) => p.id === recipientId) || allowedRecipients[0] || participants[1];
 
   const senderBalance = balances[sender.id]?.confirmed ?? sender.initialBalance;
   const pendingChange = balances[sender.id]?.pendingChange ?? 0;
@@ -129,14 +194,23 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                 }}
                 className="w-full p-2 border border-slate-300 rounded-lg bg-white font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-sky-500 text-xs"
               >
-                {participants.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({balances[p.id]?.confirmed ?? p.initialBalance} EDC)
-                  </option>
-                ))}
+                {allowedSenders.map((p) => {
+                  const isYou = currentUser && p.id === currentUser.id;
+                  const bal = balances[p.id]?.confirmed ?? p.initialBalance;
+                  return (
+                    <option key={p.id} value={p.id}>
+                      {isYou ? `🎒 ${p.name} (Dein Wallet)` : `🤖 ${p.name} (Bot)`} – {bal} EDC
+                    </option>
+                  );
+                })}
               </select>
               <span className="text-[10px] text-slate-500 mt-1 block">
-                Verfügbar: <strong>{availableBalance} EDC</strong>
+                {isSenderCurrentUser ? (
+                  <span className="text-emerald-700 font-medium">✓ Dein persönliches Wallet</span>
+                ) : (
+                  <span className="text-amber-700 font-medium">🤖 Bot-zu-Bot Simulation</span>
+                )}
+                {' · '}Verfügbar: <strong>{availableBalance} EDC</strong>
               </span>
             </div>
 
@@ -152,16 +226,22 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                 }}
                 className="w-full p-2 border border-slate-300 rounded-lg bg-white font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-sky-500 text-xs"
               >
-                {participants
-                  .filter((p) => p.id !== senderId)
-                  .map((p) => (
+                {allowedRecipients.map((p) => {
+                  const isYou = currentUser && p.id === currentUser.id;
+                  const isHuman = p.isHumanPlayer || isYou;
+                  return (
                     <option key={p.id} value={p.id}>
-                      {p.name} ({p.role})
+                      {isYou ? `🎒 ${p.name} (Du)` : isHuman ? `👤 ${p.name} (Mitschüler)` : `🤖 ${p.name} (Bot)`}
                     </option>
-                  ))}
+                  );
+                })}
               </select>
               <span className="text-[10px] text-slate-500 mt-1 block">
-                Empfängt den Betrag
+                {isSenderBot ? (
+                  <span className="text-amber-700">Bots zahlen nur an andere Bots</span>
+                ) : (
+                  <span>Empfängt den Betrag</span>
+                )}
               </span>
             </div>
           </div>

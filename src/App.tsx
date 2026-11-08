@@ -711,6 +711,7 @@ export default function App() {
         balances={balances}
         defaultSenderId={transferSenderId}
         onSendTransaction={handleSendTransaction}
+        currentUser={currentUser || undefined}
       />
 
       <MiningModal
@@ -722,6 +723,7 @@ export default function App() {
         lastBlock={lastBlock}
         mempool={mempool}
         participants={participants}
+        currentUser={currentUser || undefined}
         onBlockMined={handleBlockMined}
         onOpenTransfer={() => {
           setTransferSenderId(currentUser?.id || 'user');

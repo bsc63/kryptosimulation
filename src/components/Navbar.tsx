@@ -74,16 +74,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Zone 2 (Center / Right): Primary Navigation Tabs */}
           <nav className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto py-1">
             <button
-              onClick={() => setActiveTab('labor')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 ${
-                activeTab === 'labor'
-                  ? 'bg-slate-100 text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              Blockchain-Labor
-            </button>
-            <button
               onClick={() => setActiveTab('mining')}
               className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
                 activeTab === 'mining'
