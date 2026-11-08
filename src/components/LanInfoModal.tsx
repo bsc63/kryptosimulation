@@ -251,16 +251,22 @@ export const LanInfoModal: React.FC<LanInfoModalProps> = ({
                 <div className="flex items-center justify-between text-[11px] font-semibold text-slate-700">
                   <span>Terminal-Befehl zum Starten:</span>
                   <button
-                    onClick={() => copyToClipboard('python3 server.py 8000', 'py')}
-                    className="text-slate-500 hover:text-slate-800 flex items-center gap-1 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded"
+                    onClick={() => copyToClipboard('python3 server.py', 'py')}
+                    className="text-slate-500 hover:text-slate-800 flex items-center gap-1 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded cursor-pointer"
                   >
                     <Copy className="w-3 h-3" />
                     {copiedCmd === 'py' ? 'Kopiert!' : 'Befehl kopieren'}
                   </button>
                 </div>
                 <div className="bg-slate-900 text-emerald-400 p-2.5 rounded-lg font-mono text-xs flex items-center justify-between">
-                  <code>python3 server.py 8000</code>
+                  <code>python3 server.py</code>
+                  <span className="text-slate-400 text-[10px] font-sans">
+                    (Standard: Port 8050, weicht automatisch aus)
+                  </span>
                 </div>
+                <p className="text-[10px] text-slate-500 pt-0.5">
+                  💡 <strong>Keine Port-Konflikte:</strong> Nutzt automatisch Port 8050 statt 8000. Falls Chromium noch eine alte Web-App anzeigt: drücke <kbd className="bg-slate-100 px-1 py-0.5 rounded border border-slate-300 font-mono text-[9px]">Strg + Umschalt + R</kbd> (Hard Refresh) oder öffne ein privates Fenster.
+                </p>
               </div>
 
               {/* Toggle to view raw script */}
