@@ -142,8 +142,19 @@ def broadcast_event(event_type, data):
             if dead in sse_clients:
                 sse_clients.remove(dead)
 
-# Determine static files directory (docs or dist)
-STATIC_DIR = "docs" if os.path.exists("docs") else ("dist" if os.path.exists("dist") else ".")
+# Determine static files directory (docs or dist) relative to this script's directory
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+docs_path = os.path.join(SCRIPT_DIR, "docs")
+dist_path = os.path.join(SCRIPT_DIR, "dist")
+
+if os.path.exists(docs_path) and os.path.exists(os.path.join(docs_path, "index.html")):
+    STATIC_DIR = docs_path
+elif os.path.exists(dist_path) and os.path.exists(os.path.join(dist_path, "index.html")):
+    STATIC_DIR = dist_path
+elif os.path.exists(os.path.join(SCRIPT_DIR, "index.html")):
+    STATIC_DIR = SCRIPT_DIR
+else:
+    STATIC_DIR = docs_path if os.path.exists(docs_path) else SCRIPT_DIR
 
 def get_local_ip():
     """Finds the LAN IP address of this machine to display on the blackboard."""

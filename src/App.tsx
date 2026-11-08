@@ -109,39 +109,44 @@ export default function App() {
   // Initialize blockchain locally first (Genesis + Block 1)
   useEffect(() => {
     async function initBlockchain() {
-      setIsLoading(true);
-      const genesis = await createGenesisBlock();
-      const block1 = await createInitialBlock1(genesis);
-      const initialBlocks = [genesis, block1];
+      try {
+        setIsLoading(true);
+        const genesis = await createGenesisBlock();
+        const block1 = await createInitialBlock1(genesis);
+        const initialBlocks = [genesis, block1];
 
-      setBlocks(initialBlocks);
-      setOriginalBlocks(JSON.parse(JSON.stringify(initialBlocks)));
+        setBlocks(initialBlocks);
+        setOriginalBlocks(JSON.parse(JSON.stringify(initialBlocks)));
 
-      // Initial pending transactions in Mempool
-      const initialMempool: Transaction[] = [
-        {
-          id: 'tx-seed-pending-1',
-          senderId: 'sophie',
-          senderName: 'Sophie',
-          recipientId: 'jonas',
-          recipientName: 'Jonas',
-          amount: 3,
-          purpose: 'Hausaufgaben-Zusammenfassung Physik',
-          timestamp: Date.now() - 300000,
-        },
-        {
-          id: 'tx-seed-pending-2',
-          senderId: 'lukas',
-          senderName: 'Lukas',
-          recipientId: 'mia',
-          recipientName: 'Mia',
-          amount: 4,
-          purpose: 'Gaming-Mauspad ausgeliehen',
-          timestamp: Date.now() - 120000,
-        },
-      ];
-      setMempool(initialMempool);
-      setIsLoading(false);
+        // Initial pending transactions in Mempool
+        const initialMempool: Transaction[] = [
+          {
+            id: 'tx-seed-pending-1',
+            senderId: 'sophie',
+            senderName: 'Sophie',
+            recipientId: 'jonas',
+            recipientName: 'Jonas',
+            amount: 3,
+            purpose: 'Hausaufgaben-Zusammenfassung Physik',
+            timestamp: Date.now() - 300000,
+          },
+          {
+            id: 'tx-seed-pending-2',
+            senderId: 'lukas',
+            senderName: 'Lukas',
+            recipientId: 'mia',
+            recipientName: 'Mia',
+            amount: 4,
+            purpose: 'Gaming-Mauspad ausgeliehen',
+            timestamp: Date.now() - 120000,
+          },
+        ];
+        setMempool(initialMempool);
+      } catch (err) {
+        console.error('Blockchain initialization error:', err);
+      } finally {
+        setIsLoading(false);
+      }
     }
 
     initBlockchain();
