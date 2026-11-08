@@ -258,7 +258,20 @@ export default function App() {
             setBrokenBlockIndex(null);
           }
           if (Array.isArray(serverMempool)) setMempool(serverMempool);
-          if (Array.isArray(serverList)) setParticipants(serverList);
+          if (Array.isArray(serverList)) {
+            setParticipants(serverList);
+          } else {
+            setParticipants([...INITIAL_PARTICIPANTS]);
+          }
+
+          // Clean local student wallet & WebStorage on classroom reset
+          try {
+            localStorage.removeItem('kryptokette_player');
+          } catch {
+            // ignore
+          }
+          setCurrentUser(null);
+          setTransferSenderId('mia');
         } catch (err) {
           console.error('chain_reset error:', err);
         }
@@ -455,8 +468,28 @@ export default function App() {
     }
   };
 
+  const handleLeavePlayer = () => {
+    try {
+      localStorage.removeItem('kryptokette_player');
+    } catch {
+      // ignore
+    }
+    if (currentUser) {
+      setParticipants((prev) => prev.filter((p) => p.id !== currentUser.id));
+    }
+    setCurrentUser(null);
+    setTransferSenderId('mia');
+  };
+
   const handleResetSimulation = async () => {
-    if (confirm('Möchtest du die gesamte Blockchain-Simulation auf den Anfangszustand zurücksetzen?')) {
+    if (
+      confirm(
+        'Möchtest du die gesamte Blockchain-Simulation für eine neue Schulklasse auf den Anfangszustand zurücksetzen?\n\n' +
+          '• Alle geschürften Blöcke werden auf Genesis + Block 1 zurückgesetzt\n' +
+          '• Alle eingetragenen Schüler-Wallets und Browser-Speicher werden gelöscht\n' +
+          '• Alle Teilnehmer starten wieder mit einem sauberen Ausgangszustand'
+      )
+    ) {
       const genesis = await createGenesisBlock();
       const block1 = await createInitialBlock1(genesis);
       const initialBlocks = [genesis, block1];
@@ -477,6 +510,16 @@ export default function App() {
       ]);
       setIsChainValid(true);
       setBrokenBlockIndex(null);
+
+      // Clean local storage and wallet state
+      try {
+        localStorage.removeItem('kryptokette_player');
+      } catch {
+        // ignore
+      }
+      setCurrentUser(null);
+      setParticipants([...INITIAL_PARTICIPANTS]);
+      setTransferSenderId('mia');
 
       if (lanStatus === 'connected') {
         try {
@@ -766,6 +809,7 @@ export default function App() {
         isOpen={isJoinModalOpen}
         onClose={() => setIsJoinModalOpen(false)}
         onJoin={handleJoinPlayer}
+        onLeave={handleLeavePlayer}
         currentPlayer={currentUser || undefined}
       />
 

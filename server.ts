@@ -69,7 +69,9 @@ async function initServerBlockchain() {
     },
   ];
 
-  console.log('✅ Server Blockchain initialized with Genesis + Block #1');
+  participants = [...INITIAL_PARTICIPANTS];
+
+  console.log('✅ Server Blockchain initialized with Genesis + Block #1 and reset participants');
 }
 
 // API Routes

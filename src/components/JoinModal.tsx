@@ -6,6 +6,7 @@ interface JoinModalProps {
   isOpen: boolean;
   onClose: () => void;
   onJoin: (player: Participant) => void;
+  onLeave?: () => void;
   currentPlayer?: Participant;
 }
 
@@ -26,6 +27,7 @@ export const JoinModal: React.FC<JoinModalProps> = ({
   isOpen,
   onClose,
   onJoin,
+  onLeave,
   currentPlayer,
 }) => {
   const [name, setName] = useState<string>(currentPlayer?.name || '');
@@ -183,15 +185,30 @@ export const JoinModal: React.FC<JoinModalProps> = ({
             </span>
           </div>
 
-          {/* Submit Button */}
-          <div className="pt-2">
+          {/* Submit & Reset Buttons */}
+          <div className="pt-2 space-y-2">
             <button
               type="submit"
-              className="w-full py-2.5 px-4 rounded-xl font-bold text-xs bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white shadow-xs flex items-center justify-center gap-2 transition-colors"
+              className="w-full py-2.5 px-4 rounded-xl font-bold text-xs bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
               <Wallet className="w-4 h-4" />
               <span>{currentPlayer ? 'Profil aktualisieren' : 'Wallet erstellen & Beitreten'}</span>
             </button>
+
+            {currentPlayer && onLeave && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('Möchtest du dein Schüler-Wallet auf diesem Gerät abmelden / löschen?')) {
+                    onLeave();
+                    onClose();
+                  }
+                }}
+                className="w-full py-2 px-3 text-[11px] font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+              >
+                Wallet auf diesem Gerät abmelden / löschen
+              </button>
+            )}
           </div>
         </form>
       </div>
