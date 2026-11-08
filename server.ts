@@ -183,16 +183,32 @@ setInterval(() => {
   }
 }, 24000);
 
+function getPort(): number {
+  const portArgIndex = process.argv.indexOf('--port');
+  if (portArgIndex !== -1 && process.argv[portArgIndex + 1]) {
+    return Number(process.argv[portArgIndex + 1]);
+  }
+  // In development, the AI Studio runner proxies port 3000 to the iframe.
+  // We must always bind to 3000 in dev mode (never 8080 where nginx is listening).
+  if (process.env.NODE_ENV !== 'production') {
+    return 3000;
+  }
+  return Number(process.env.PORT) || 3000;
+}
+
 async function startServer() {
   await initServerBlockchain();
 
   const server = http.createServer(app);
-  const PORT = Number(process.env.PORT) || 3000;
+  const PORT = getPort();
 
   // In dev environment, mount Vite middlewares
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR !== 'true',
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
